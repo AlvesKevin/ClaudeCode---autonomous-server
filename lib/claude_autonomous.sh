@@ -81,7 +81,6 @@ collect_system_info() {
     } > "$output_file"
 
     log_success "Informations système collectées: $output_file"
-    echo "$output_file"
 }
 
 # ==============================================================================
@@ -93,7 +92,14 @@ analyze_system_with_claude() {
     log_info "Demande d'analyse système à Claude Code..."
 
     # Collecter les infos système
-    local system_info=$(collect_system_info)
+    local system_info="/tmp/system_info_$(date +%Y%m%d_%H%M%S).txt"
+    collect_system_info "$system_info" > /dev/null 2>&1
+
+    if [[ ! -f "$system_info" ]]; then
+        log_error "Échec de la collecte des informations système"
+        return 1
+    fi
+
     local system_content=$(cat "$system_info")
 
     # Lire l'historique global
