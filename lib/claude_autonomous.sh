@@ -283,15 +283,22 @@ EOF
 
 # Laisser Claude décider et créer les projets du jour
 autonomous_project_planning() {
+    local analysis_file="$1"
+
     log_info "=== MODE AUTONOME: Planification des projets du jour ==="
 
-    # Faire analyser le système
-    local analysis_file=$(analyze_system_with_claude)
+    # Si pas de fichier d'analyse fourni, en faire une nouvelle
+    if [[ -z "$analysis_file" ]] || [[ ! -f "$analysis_file" ]]; then
+        log_warning "Pas d'analyse fournie, génération d'une nouvelle analyse..."
+        analysis_file=$(analyze_system_with_claude)
+    fi
 
     if [[ ! -f "$analysis_file" ]]; then
         log_error "Impossible de poursuivre sans analyse système"
         return 1
     fi
+
+    log_info "Utilisation de l'analyse: $analysis_file"
 
     # Extraire les projets proposés de l'analyse
     log_info "Extraction des projets proposés par Claude..."
@@ -517,11 +524,11 @@ daily_autonomous_routine() {
 
         # 1. Analyse système
         log_info "Étape 1: Analyse du système"
-        analyze_system_with_claude
+        local analysis_file=$(analyze_system_with_claude)
 
         # 2. Planification autonome
         log_info "Étape 2: Planification des projets du jour"
-        autonomous_project_planning
+        autonomous_project_planning "$analysis_file"
 
         # 3. Travailler sur les projets existants actifs
         log_info "Étape 3: Travail sur les projets existants"
