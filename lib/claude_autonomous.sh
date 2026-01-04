@@ -258,17 +258,20 @@ EOF
     if claude -p "$(cat /tmp/claude_system_prompt.txt)" > "$analysis_output" 2>&1; then
         log_success "Analyse système terminée: $analysis_output"
 
-        # Afficher un résumé dans les logs
-        echo ""
-        echo "═══════════════════════════════════════════════════════════"
-        echo "RÉSUMÉ DE L'ANALYSE CLAUDE"
-        echo "═══════════════════════════════════════════════════════════"
-        head -50 "$analysis_output"
-        echo "..."
-        echo ""
-        echo "Analyse complète: $analysis_output"
-        echo "═══════════════════════════════════════════════════════════"
+        # Afficher un résumé dans les logs (rediriger vers stderr pour ne pas polluer stdout)
+        {
+            echo ""
+            echo "═══════════════════════════════════════════════════════════"
+            echo "RÉSUMÉ DE L'ANALYSE CLAUDE"
+            echo "═══════════════════════════════════════════════════════════"
+            head -50 "$analysis_output"
+            echo "..."
+            echo ""
+            echo "Analyse complète: $analysis_output"
+            echo "═══════════════════════════════════════════════════════════"
+        } >&2
 
+        # Retourner SEULEMENT le chemin du fichier sur stdout
         echo "$analysis_output"
     else
         log_error "Échec de l'analyse système par Claude"
