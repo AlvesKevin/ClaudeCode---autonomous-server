@@ -1,0 +1,25 @@
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+
+# Runtime data
+projects/
+backups/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+
+# Editor directories
+.vscode/
+.idea/
+*.sublime-*
