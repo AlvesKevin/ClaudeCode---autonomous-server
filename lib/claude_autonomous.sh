@@ -301,69 +301,75 @@ autonomous_project_planning() {
 
     log_info "Utilisation de l'analyse: $analysis_file"
 
-    # Extraire les projets proposés de l'analyse
-    log_info "Extraction des projets proposés par Claude..."
+    # Extraire les projets proposés directement de l'analyse
+    log_info "Extraction des projets proposés de l'analyse..."
 
-    # Demander à Claude de créer les projets
-    cat > /tmp/claude_create_projects_prompt.txt << EOF
-Basé sur ton analyse précédente (ci-dessous), crée les projets concrets que tu vas réaliser aujourd'hui.
+    # Parser l'analyse pour trouver les projets (section "🎯 Projets Proposés")
+    local projects_section=$(sed -n '/## 🎯 Projets Proposés/,/## /p' "$analysis_file" | head -n -1)
 
-ANALYSE:
-$(cat "$analysis_file")
+    if [[ -z "$projects_section" ]]; then
+        log_warning "Aucun projet trouvé dans l'analyse, génération manuelle..."
 
-Pour chaque projet proposé, fournis :
+        # Fallback: demander à Claude de créer des projets (avec timeout)
+        cat > /tmp/claude_create_projects_prompt.txt << EOF
+Basé sur cette analyse système, propose 1-2 projets concrets à réaliser aujourd'hui.
 
-1. **Nom du projet** (format: snake_case, ex: securite_ssh_hardening)
-2. **Description courte** (1 phrase)
-3. **Objectifs concrets** (liste à puces)
-4. **Étapes d'implémentation** détaillées
-5. **Critères de succès** (comment savoir que c'est terminé)
+RÉSUMÉ DE L'ANALYSE:
+$(head -100 "$analysis_file")
 
-Format de réponse attendu:
+Réponds UNIQUEMENT avec ce format (pas d'explication supplémentaire):
 
-PROJECT:nom_du_projet_1
-DESCRIPTION:Description courte du projet
-OBJECTIVES:
-- Objectif 1
-- Objectif 2
-STEPS:
-1. Étape détaillée 1
-2. Étape détaillée 2
-SUCCESS:
-- Critère 1
-- Critère 2
+PROJECT:nom_projet_1
+DESCRIPTION:Description courte
 ---
-PROJECT:nom_du_projet_2
-[même format si projet 2]
-
-Limite-toi à 1-2 projets réalisables aujourd'hui.
+PROJECT:nom_projet_2
+DESCRIPTION:Description courte
 EOF
 
-    local projects_spec=$(claude -p "$(cat /tmp/claude_create_projects_prompt.txt)" 2>&1)
+        local projects_spec
+        if ! projects_spec=$(timeout 120 claude -p "$(cat /tmp/claude_create_projects_prompt.txt)" 2>&1); then
+            log_error "Timeout lors de la génération des projets"
+            return 1
+        fi
+    else
+        log_success "Projets trouvés dans l'analyse"
+        projects_spec="$projects_section"
+    fi
 
     # Parser et créer les projets
-    echo "$projects_spec" | grep "^PROJECT:" | while read -r line; do
-        local project_name=$(echo "$line" | cut -d: -f2)
+    # Chercher les lignes qui ressemblent à "### Projet X:" ou "PROJECT:"
+    local project_count=0
 
-        if [[ -n "$project_name" ]]; then
-            log_info "Création du projet autonome: $project_name"
+    # Extraire les noms de projets du format markdown (### Projet 1: Nom Du Projet)
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^###[[:space:]]*Projet[[:space:]]+[0-9]+:[[:space:]]*(.+)$ ]]; then
+            local project_title="${BASH_REMATCH[1]}"
+            # Convertir le titre en snake_case
+            local project_name=$(echo "$project_title" | tr '[:upper:]' '[:lower:]' | tr ' ' '_' | tr -cd 'a-z0-9_')
 
-            # Créer le projet via le project_manager
-            create_project "$project_name"
+            if [[ -n "$project_name" ]]; then
+                ((project_count++))
+                log_info "Création du projet autonome: $project_name (\"$project_title\")"
 
-            # Enrichir le contexte avec les détails de Claude
-            local project_context="${PROJECTS_DIR}/${project_name}/context.md"
+                # Créer le projet via le project_manager
+                create_project "$project_name"
 
-            # Ajouter les spécifications complètes au contexte
-            cat >> "$project_context" << CONTEXT_END
+                # Enrichir le contexte avec les détails de Claude
+                local project_context="${PROJECTS_DIR}/${project_name}/context.md"
+
+                # Ajouter les spécifications complètes au contexte
+                cat >> "$project_context" << CONTEXT_END
 
 ---
 
-## 🤖 Spécifications Autonomes de Claude
+## 🤖 Projet Proposé par Claude
 
-Date de création: $(date '+%Y-%m-%d %H:%M:%S')
+**Titre Original**: $project_title
+**Date de création**: $(date '+%Y-%m-%d %H:%M:%S')
 
-$(echo "$projects_spec" | sed -n "/^PROJECT:${project_name}/,/^---/p")
+### Détails du Projet
+
+$(echo "$projects_spec" | sed -n "/### Projet [0-9]*: $project_title/,/^---$/p" | head -n -1)
 
 ---
 
@@ -374,13 +380,18 @@ Basé sur l'analyse système du $(date '+%Y-%m-%d'):
 
 CONTEXT_END
 
-            add_journal_entry "$project_name" "Projet créé de manière autonome par Claude" "INFO"
+                add_journal_entry "$project_name" "Projet créé de manière autonome par Claude: $project_title" "INFO"
 
-            log_success "Projet autonome créé: $project_name"
+                log_success "Projet autonome créé: $project_name"
+            fi
         fi
-    done
+    done <<< "$projects_spec"
 
-    log_success "=== Planification autonome terminée ==="
+    if [[ $project_count -eq 0 ]]; then
+        log_warning "Aucun projet n'a pu être extrait de l'analyse"
+    else
+        log_success "=== Planification autonome terminée: $project_count projet(s) créé(s) ==="
+    fi
 }
 
 # ==============================================================================
