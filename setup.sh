@@ -353,56 +353,44 @@ authenticate_claude_code() {
     # Vérifier si déjà authentifié
     info "Vérification de l'authentification Claude Code..."
 
-    # Tester si une session est active
-    if claude --version &> /dev/null; then
-        # Essayer une commande simple pour tester l'auth
-        if timeout 5 claude help &> /dev/null 2>&1; then
-            success "Claude Code est déjà authentifié"
-            return 0
-        fi
-    fi
-
-    warning "Claude Code n'est pas authentifié"
-    echo ""
-    info "Pour utiliser Claude Code, vous devez vous authentifier avec votre compte Claude."
-    info "Cette opération se fait UNE SEULE FOIS et sera persistée pour cron."
-    echo ""
-
-    read -p "Voulez-vous vous authentifier maintenant ? (o/N) " -n 1 -r
-    echo
-
-    if [[ ! $REPLY =~ ^[Oo]$ ]]; then
-        warning "Authentification ignorée"
-        info "Pour vous authentifier plus tard, exécutez:"
-        info "  claude auth login"
-        echo ""
-        info "IMPORTANT: Vous DEVEZ vous authentifier avant d'utiliser le workflow !"
+    # Tester l'authentification avec une commande non-interactive
+    if timeout 5 claude -p "test" 2>&1 | grep -qiv "not.*authenticated\|login.*required\|credentials.*not.*found"; then
+        success "Claude Code est déjà authentifié"
         return 0
     fi
 
+    warning "Claude Code n'est PAS authentifié"
     echo ""
-    info "Lancement de l'authentification interactive..."
-    info "Suivez les instructions à l'écran pour vous connecter à votre compte Claude."
+    info "╔════════════════════════════════════════════════════════════╗"
+    info "║      AUTHENTIFICATION REQUISE (ÉTAPE MANUELLE)            ║"
+    info "╚════════════════════════════════════════════════════════════╝"
+    echo ""
+    info "L'authentification Claude Code est INTERACTIVE."
+    info "Vous devrez la faire MANUELLEMENT après ce setup."
+    echo ""
+    info "${YELLOW}Instructions d'authentification:${NC}"
+    echo ""
+    info "  1. Exécutez (APRÈS ce setup):"
+    echo "     ${GREEN}claude${NC}"
+    echo ""
+    info "  2. Choisissez 'Claude.ai' quand on vous demande"
+    echo ""
+    info "  3. Suivez les instructions (ouverture navigateur)"
+    echo ""
+    info "  4. Une fois connecté, tapez: ${GREEN}/exit${NC}"
+    echo ""
+    info "  5. Vérifiez que ça marche:"
+    echo "     ${GREEN}claude -p \"test\"${NC}"
+    echo ""
+    info "${YELLOW}Note importante:${NC}"
+    info "  • L'authentification se fait UNE SEULE FOIS"
+    info "  • Les credentials sont sauvegardés automatiquement"
+    info "  • Cron pourra utiliser votre compte sans re-authentification"
+    echo ""
+    warning "Le workflow NE FONCTIONNERA PAS sans cette authentification !"
     echo ""
 
-    # Lancer l'authentification en tant qu'utilisateur approprié
-    if [[ $EUID -eq 0 ]]; then
-        su - "$INSTALL_USER" -c "claude auth login"
-    else
-        claude auth login
-    fi
-
-    # Vérifier le résultat
-    echo ""
-    if timeout 5 claude help &> /dev/null 2>&1; then
-        success "Authentification réussie !"
-        info "Votre session Claude Code est maintenant active."
-        info "Le workflow pourra utiliser votre abonnement Claude Code automatiquement."
-    else
-        error "L'authentification a échoué"
-        info "Réessayez manuellement avec: claude auth login"
-        return 1
-    fi
+    return 0
 }
 
 # ==============================================================================
@@ -447,16 +435,20 @@ ${BLUE}Prochaines étapes:${NC}
   1. Recharger le shell pour activer Claude Code:
      ${GREEN}source ~/.bashrc${NC}
 
-  2. Authentifier Claude Code (OBLIGATOIRE):
-     ${GREEN}claude auth login${NC}
+  2. Authentifier Claude Code (OBLIGATOIRE - UNE SEULE FOIS):
+     ${GREEN}claude${NC}
+     Puis choisissez Claude.ai, connectez-vous, et tapez ${GREEN}/exit${NC}
 
-  3. Ajouter une demande de projet prioritaire:
+  3. Vérifier l'authentification:
+     ${GREEN}claude -p "test"${NC}
+
+  4. Ajouter une demande de projet prioritaire:
      ${GREEN}./run_agent.sh --request "Install Docker and Docker Compose"${NC}
 
-  4. Lancer le mode autonome immédiatement:
+  5. Lancer le mode autonome immédiatement:
      ${GREEN}./run_agent.sh --run-now${NC}
 
-  5. Vérifier le statut:
+  6. Vérifier le statut:
      ${GREEN}./run_agent.sh --status${NC}
 
 ${BLUE}Tâche automatique:${NC}
