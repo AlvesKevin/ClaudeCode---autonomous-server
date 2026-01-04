@@ -347,13 +347,19 @@ EOF
 
     # Extraire les noms de projets du format markdown (### Projet 1: Nom Du Projet)
     while IFS= read -r line; do
+        # Debug: montrer chaque ligne testée
+        [[ "$line" =~ ^### ]] && echo "  -> Test ligne: $line" >&2
+
         # Essayer plusieurs patterns possibles
-        if [[ "$line" =~ ^###[[:space:]]*Projet[[:space:]]+[0-9]+:[[:space:]]*(.+)$ ]]; then
-            local project_title="${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ ^###[[:space:]]+Projet[[:space:]]+[0-9]+:[[:space:]]*(.+)$ ]]; then
-            local project_title="${BASH_REMATCH[1]}"
+        if [[ "$line" =~ ^###[[:space:]]Projet[[:space:]]([0-9]+):[[:space:]](.+)$ ]]; then
+            local project_title="${BASH_REMATCH[2]}"
+            echo "  ✓ Match pattern 1: $project_title" >&2
+        elif [[ "$line" =~ ^###[[:space:]]+Projet[[:space:]]+([0-9]+):[[:space:]]*(.+)$ ]]; then
+            local project_title="${BASH_REMATCH[2]}"
+            echo "  ✓ Match pattern 2: $project_title" >&2
         elif [[ "$line" =~ ^PROJECT:[[:space:]]*(.+)$ ]]; then
             local project_title="${BASH_REMATCH[1]}"
+            echo "  ✓ Match pattern 3: $project_title" >&2
         else
             continue
         fi
