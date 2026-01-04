@@ -305,7 +305,8 @@ autonomous_project_planning() {
     log_info "Extraction des projets proposés de l'analyse..."
 
     # Parser l'analyse pour trouver les projets (section "🎯 Projets Proposés")
-    local projects_section=$(sed -n '/## 🎯 Projets Proposés/,/## /p' "$analysis_file" | head -n -1)
+    # Attention: utiliser un pattern qui capture jusqu'à la prochaine section ## (mais pas la ligne actuelle)
+    local projects_section=$(sed -n '/## 🎯 Projets Proposés/,/^## [^🎯]/p' "$analysis_file" | sed '$d')
 
     if [[ -z "$projects_section" ]]; then
         log_warning "Aucun projet trouvé dans l'analyse, génération manuelle..."
@@ -340,25 +341,38 @@ EOF
     # Chercher les lignes qui ressemblent à "### Projet X:" ou "PROJECT:"
     local project_count=0
 
+    # Debug: afficher les premières lignes de projects_spec pour diagnostic
+    log_info "Contenu à parser (premières lignes):" >&2
+    echo "$projects_spec" | head -5 >&2
+
     # Extraire les noms de projets du format markdown (### Projet 1: Nom Du Projet)
     while IFS= read -r line; do
+        # Essayer plusieurs patterns possibles
         if [[ "$line" =~ ^###[[:space:]]*Projet[[:space:]]+[0-9]+:[[:space:]]*(.+)$ ]]; then
             local project_title="${BASH_REMATCH[1]}"
-            # Convertir le titre en snake_case
-            local project_name=$(echo "$project_title" | tr '[:upper:]' '[:lower:]' | tr ' ' '_' | tr -cd 'a-z0-9_')
+        elif [[ "$line" =~ ^###[[:space:]]+Projet[[:space:]]+[0-9]+:[[:space:]]*(.+)$ ]]; then
+            local project_title="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^PROJECT:[[:space:]]*(.+)$ ]]; then
+            local project_title="${BASH_REMATCH[1]}"
+        else
+            continue
+        fi
 
-            if [[ -n "$project_name" ]]; then
-                ((project_count++))
-                log_info "Création du projet autonome: $project_name (\"$project_title\")"
+        # Convertir le titre en snake_case
+        local project_name=$(echo "$project_title" | tr '[:upper:]' '[:lower:]' | tr ' ' '_' | tr -cd 'a-z0-9_')
 
-                # Créer le projet via le project_manager
-                create_project "$project_name"
+        if [[ -n "$project_name" ]]; then
+            ((project_count++))
+            log_info "Création du projet autonome: $project_name (\"$project_title\")"
 
-                # Enrichir le contexte avec les détails de Claude
-                local project_context="${PROJECTS_DIR}/${project_name}/context.md"
+            # Créer le projet via le project_manager
+            create_project "$project_name"
 
-                # Ajouter les spécifications complètes au contexte
-                cat >> "$project_context" << CONTEXT_END
+            # Enrichir le contexte avec les détails de Claude
+            local project_context="${PROJECTS_DIR}/${project_name}/context.md"
+
+            # Ajouter les spécifications complètes au contexte
+            cat >> "$project_context" << CONTEXT_END
 
 ---
 
@@ -380,15 +394,16 @@ Basé sur l'analyse système du $(date '+%Y-%m-%d'):
 
 CONTEXT_END
 
-                add_journal_entry "$project_name" "Projet créé de manière autonome par Claude: $project_title" "INFO"
+            add_journal_entry "$project_name" "Projet créé de manière autonome par Claude: $project_title" "INFO"
 
-                log_success "Projet autonome créé: $project_name"
-            fi
+            log_success "Projet autonome créé: $project_name"
         fi
     done <<< "$projects_spec"
 
     if [[ $project_count -eq 0 ]]; then
         log_warning "Aucun projet n'a pu être extrait de l'analyse"
+        log_info "Contenu complet à parser (debug):" >&2
+        echo "$projects_spec" >&2
     else
         log_success "=== Planification autonome terminée: $project_count projet(s) créé(s) ==="
     fi
