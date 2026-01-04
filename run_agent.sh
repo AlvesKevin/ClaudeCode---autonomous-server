@@ -60,36 +60,38 @@ check_claude_authentication() {
         return 1
     fi
 
-    # Vérifier si le fichier de configuration d'authentification existe
-    local auth_config="${HOME}/.config/claude/config.json"
-    local auth_legacy="${HOME}/.claude/config.json"
-
-    if [[ ! -f "$auth_config" ]] && [[ ! -f "$auth_legacy" ]]; then
-        log_error "Aucune configuration d'authentification trouvée"
-        log_info "Pour vous authentifier, exécutez:"
-        log_info "  claude auth login"
-        return 1
-    fi
-
     # Tester l'authentification avec une commande non-interactive
+    # On teste directement car Claude peut stocker credentials dans le keychain système
     local auth_test_output
-    auth_test_output=$(timeout 10 claude -p "test" 2>&1 || echo "")
+    local auth_test_exitcode
 
-    # Si la commande réussit sans erreur d'authentification, on est bon
-    if echo "$auth_test_output" | grep -qiv "not.*authenticated\|login.*required\|credentials.*not.*found\|authentication.*required"; then
+    auth_test_output=$(timeout 10 claude -p "test" 2>&1)
+    auth_test_exitcode=$?
+
+    # Si le code de sortie est 0, la commande a réussi
+    if [[ $auth_test_exitcode -eq 0 ]]; then
         log_success "Claude Code authentifié - Session active"
         return 0
     fi
 
-    log_error "Claude Code n'est pas authentifié ou la session a expiré"
-    log_info ""
-    log_info "Pour vous authentifier:"
-    log_info "  1. Exécutez: claude"
-    log_info "  2. Choisissez 'Claude.ai'"
-    log_info "  3. Suivez les instructions"
-    log_info "  4. Tapez /exit pour sortir"
-    log_info "  5. Vérifiez: claude -p \"test\""
-    log_info ""
+    # Vérifier si c'est une erreur d'authentification spécifique
+    if echo "$auth_test_output" | grep -qi "not.*authenticated\|login.*required\|credentials.*not.*found\|authentication.*required\|please.*log.*in"; then
+        log_error "Claude Code n'est pas authentifié"
+        log_info ""
+        log_info "Pour vous authentifier:"
+        log_info "  1. Exécutez: claude"
+        log_info "  2. Choisissez 'Claude.ai'"
+        log_info "  3. Suivez les instructions"
+        log_info "  4. Tapez /exit pour sortir"
+        log_info "  5. Vérifiez: claude -p \"test\""
+        log_info ""
+        return 1
+    fi
+
+    # Autre erreur (timeout, réseau, etc.)
+    log_warning "Impossible de vérifier l'authentification (timeout ou erreur réseau)"
+    log_info "Sortie de la commande:"
+    echo "$auth_test_output" | head -5
     return 1
 }
 
