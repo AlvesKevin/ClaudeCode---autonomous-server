@@ -251,10 +251,11 @@ Date: $(date '+%Y-%m-%d %H:%M:%S')
 Sois **concret**, **actionnable** et **autonome** dans tes propositions.
 EOF
 
-    # Appeler Claude Code avec le prompt
+    # Appeler Claude Code avec le prompt (mode non-interactif)
     log_info "Consultation de Claude Code pour analyse autonome..."
 
-    if claude chat --prompt "$(cat /tmp/claude_system_prompt.txt)" > "$analysis_output" 2>&1; then
+    # Utiliser -p pour mode non-interactif (crucial pour cron et automation)
+    if claude -p "$(cat /tmp/claude_system_prompt.txt)" > "$analysis_output" 2>&1; then
         log_success "Analyse système terminée: $analysis_output"
 
         # Afficher un résumé dans les logs
@@ -271,6 +272,8 @@ EOF
         echo "$analysis_output"
     else
         log_error "Échec de l'analyse système par Claude"
+        log_info "Vérifiez le fichier de sortie pour plus de détails:"
+        log_info "  cat $analysis_output"
         return 1
     fi
 }
@@ -325,7 +328,7 @@ PROJECT:nom_du_projet_2
 Limite-toi à 1-2 projets réalisables aujourd'hui.
 EOF
 
-    local projects_spec=$(claude chat --prompt "$(cat /tmp/claude_create_projects_prompt.txt)" 2>&1)
+    local projects_spec=$(claude -p "$(cat /tmp/claude_create_projects_prompt.txt)" 2>&1)
 
     # Parser et créer les projets
     echo "$projects_spec" | grep "^PROJECT:" | while read -r line; do
@@ -467,7 +470,7 @@ EOF
     # Consulter Claude
     local work_session="${project_dir}/session_$(date +%Y%m%d_%H%M%S).md"
 
-    if claude chat --prompt "$(cat /tmp/claude_execute_prompt.txt)" > "$work_session" 2>&1; then
+    if claude -p "$(cat /tmp/claude_execute_prompt.txt)" > "$work_session" 2>&1; then
         log_success "Session de travail générée: $work_session"
 
         # Afficher la session
