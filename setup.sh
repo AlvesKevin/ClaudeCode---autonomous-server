@@ -113,10 +113,19 @@ install_workflow() {
     info "Création de la structure de répertoires..."
     mkdir -p "${SCRIPT_DIR}"/{projects,logs,config,lib}
 
-    # Rendre les scripts exécutables
+    # Configurer les permissions des répertoires
     info "Configuration des permissions..."
     chmod +x "${SCRIPT_DIR}/run_agent.sh"
     chmod +x "${SCRIPT_DIR}/lib"/*.sh
+
+    # Définir le propriétaire correct des répertoires
+    if [[ $EUID -eq 0 ]] && [[ -n "$INSTALL_USER" ]]; then
+        chown -R "${INSTALL_USER}:${INSTALL_USER}" "${SCRIPT_DIR}"/{projects,logs,config}
+        info "Propriétaire défini: ${INSTALL_USER}"
+    fi
+
+    # S'assurer que les répertoires sont accessibles en écriture
+    chmod 755 "${SCRIPT_DIR}"/{projects,logs,config}
 
     success "Structure du workflow créée"
 }
@@ -129,11 +138,11 @@ configure_cron() {
     echo "  1. Mode AUTONOME (recommandé) - Claude analyse et décide tout seul"
     echo "  2. Mode DAILY - Exécute uniquement les projets existants"
     echo ""
-    read -p "Votre choix (1/2) [1]: " -n 1 -r
+    read -p "Votre choix (1/2) [1]: " -r choice
     echo
 
     local mode="--autonomous"
-    if [[ $REPLY == "2" ]]; then
+    if [[ "$choice" == "2" ]]; then
         mode="--daily"
         info "Mode sélectionné: DAILY (projets existants uniquement)"
     else
@@ -150,26 +159,32 @@ configure_cron() {
     # Vérifier si une tâche existe déjà
     if crontab -u "$INSTALL_USER" -l 2>/dev/null | grep -q "run_agent.sh"; then
         warning "Une tâche cron existe déjà pour ce workflow"
-        read -p "Voulez-vous la remplacer ? (o/N) " -n 1 -r
+        read -p "Voulez-vous la remplacer ? (o/N) " -r replace
         echo
-        if [[ ! $REPLY =~ ^[Oo]$ ]]; then
+        if [[ ! "$replace" =~ ^[Oo]$ ]]; then
             info "Tâche cron conservée"
             return 0
         fi
 
         # Supprimer l'ancienne tâche
-        crontab -u "$INSTALL_USER" -l 2>/dev/null | grep -v "run_agent.sh" | crontab -u "$INSTALL_USER" -
+        crontab -u "$INSTALL_USER" -l 2>/dev/null | grep -v "run_agent.sh" | crontab -u "$INSTALL_USER" - || true
     fi
 
     # Ajouter la nouvelle tâche
-    (crontab -u "$INSTALL_USER" -l 2>/dev/null; echo "$cron_entry") | crontab -u "$INSTALL_USER" -
+    (crontab -u "$INSTALL_USER" -l 2>/dev/null || true; echo "$cron_entry") | crontab -u "$INSTALL_USER" - || {
+        error "Échec de la configuration de la tâche cron"
+        warning "Vous pourrez la configurer manuellement plus tard avec:"
+        echo "  crontab -e"
+        echo "  Ajoutez: $cron_entry"
+        return 0
+    }
 
     success "Tâche cron configurée: $cron_schedule"
     info "La tâche s'exécutera tous les jours à minuit en mode: $mode"
 
     # Afficher les tâches cron actuelles
     info "Tâches cron pour $INSTALL_USER:"
-    crontab -u "$INSTALL_USER" -l | grep "run_agent"
+    crontab -u "$INSTALL_USER" -l 2>/dev/null | grep "run_agent" || echo "  (aucune tâche cron configurée)"
 }
 
 configure_environment() {
@@ -518,15 +533,15 @@ EOF
     esac
 
     # Processus d'installation
-    check_os
-    check_dependencies
-    install_workflow
-    configure_environment
-    configure_cron
-    setup_logrotate
-    install_claude_code
-    authenticate_claude_code
-    create_example_project
+    check_os || { error "Vérification OS échouée"; exit 1; }
+    check_dependencies || { error "Vérification dépendances échouée"; exit 1; }
+    install_workflow || { error "Installation workflow échouée"; exit 1; }
+    configure_environment || { error "Configuration environnement échouée"; exit 1; }
+    install_claude_code || warning "Installation Claude Code ignorée ou échouée (non bloquant)"
+    authenticate_claude_code || warning "Authentification Claude Code ignorée ou échouée (non bloquant)"
+    configure_cron || warning "Configuration cron ignorée ou échouée (non bloquant)"
+    setup_logrotate || warning "Configuration logrotate ignorée ou échouée (non bloquant)"
+    create_example_project || warning "Création projet exemple ignorée (non bloquant)"
     show_completion_message
 }
 
