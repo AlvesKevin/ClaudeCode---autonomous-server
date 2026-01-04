@@ -517,6 +517,9 @@ daily_autonomous_routine() {
 
     local routine_log="${LOGS_DIR}/autonomous_routine_$(date +%Y%m%d).log"
 
+    # Déclarer les variables AVANT le bloc pour éviter problème de sous-shell
+    local analysis_file=""
+
     {
         echo "═══════════════════════════════════════════════════════════"
         echo "ROUTINE AUTONOME - $(date '+%Y-%m-%d %H:%M:%S')"
@@ -524,7 +527,7 @@ daily_autonomous_routine() {
 
         # 1. Analyse système
         log_info "Étape 1: Analyse du système"
-        local analysis_file=$(analyze_system_with_claude)
+        analysis_file=$(analyze_system_with_claude)
 
         # 2. Planification autonome
         log_info "Étape 2: Planification des projets du jour"
