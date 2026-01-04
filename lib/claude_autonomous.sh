@@ -89,14 +89,14 @@ collect_system_info() {
 
 # Faire analyser le système par Claude et obtenir des recommandations
 analyze_system_with_claude() {
-    log_info "Demande d'analyse système à Claude Code..."
+    log_info "Demande d'analyse système à Claude Code..." >&2
 
     # Collecter les infos système
     local system_info="/tmp/system_info_$(date +%Y%m%d_%H%M%S).txt"
     collect_system_info "$system_info" > /dev/null 2>&1
 
     if [[ ! -f "$system_info" ]]; then
-        log_error "Échec de la collecte des informations système"
+        log_error "Échec de la collecte des informations système" >&2
         return 1
     fi
 
@@ -113,9 +113,9 @@ analyze_system_with_claude() {
     local directives_file="${CONFIG_DIR}/system_directives.md"
     if [[ -f "$directives_file" ]]; then
         system_directives=$(cat "$directives_file")
-        log_info "Directives système chargées"
+        log_info "Directives système chargées" >&2
     else
-        log_warning "Fichier de directives système non trouvé: $directives_file"
+        log_warning "Fichier de directives système non trouvé: $directives_file" >&2
     fi
 
     # Charger les demandes prioritaires
@@ -125,7 +125,7 @@ analyze_system_with_claude() {
         local pending_requests=$(jq -r '[.requests[] | select(.status == "pending")] | length' "$requests_file" 2>/dev/null || echo "0")
         if [[ "$pending_requests" -gt 0 ]]; then
             priority_requests=$(jq -r '.requests[] | select(.status == "pending") | "- [\(.requested_at)] \(.description) (Priorité: \(.priority))"' "$requests_file")
-            log_info "Demandes prioritaires chargées: $pending_requests demande(s)"
+            log_info "Demandes prioritaires chargées: $pending_requests demande(s)" >&2
         fi
     fi
 
@@ -252,11 +252,12 @@ Sois **concret**, **actionnable** et **autonome** dans tes propositions.
 EOF
 
     # Appeler Claude Code avec le prompt (mode non-interactif)
-    log_info "Consultation de Claude Code pour analyse autonome..."
+    log_info "Consultation de Claude Code pour analyse autonome..." >&2
 
     # Utiliser -p pour mode non-interactif (crucial pour cron et automation)
     if claude -p "$(cat /tmp/claude_system_prompt.txt)" > "$analysis_output" 2>&1; then
-        log_success "Analyse système terminée: $analysis_output"
+        # Rediriger log_success vers stderr pour ne pas polluer stdout
+        log_success "Analyse système terminée: $analysis_output" >&2
 
         # Afficher un résumé dans les logs (rediriger vers stderr pour ne pas polluer stdout)
         {
@@ -274,9 +275,9 @@ EOF
         # Retourner SEULEMENT le chemin du fichier sur stdout
         echo "$analysis_output"
     else
-        log_error "Échec de l'analyse système par Claude"
-        log_info "Vérifiez le fichier de sortie pour plus de détails:"
-        log_info "  cat $analysis_output"
+        log_error "Échec de l'analyse système par Claude" >&2
+        log_info "Vérifiez le fichier de sortie pour plus de détails:" >&2
+        log_info "  cat $analysis_output" >&2
         return 1
     fi
 }
