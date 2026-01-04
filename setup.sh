@@ -314,14 +314,30 @@ install_claude_code() {
         curl -fsSL https://claude.ai/install.sh | bash
     fi
 
+    # Configurer automatiquement le PATH dans .bashrc
+    local bashrc_file="${INSTALL_HOME}/.bashrc"
+    local path_export='export PATH="$HOME/.local/bin:$PATH"'
+
+    if [[ -f "$bashrc_file" ]] && ! grep -q '.local/bin' "$bashrc_file"; then
+        info "Configuration automatique du PATH dans .bashrc..."
+        if [[ $EUID -eq 0 ]]; then
+            su - "$INSTALL_USER" -c "echo '$path_export' >> ~/.bashrc"
+        else
+            echo "$path_export" >> "$bashrc_file"
+        fi
+        success "PATH configuré automatiquement"
+    fi
+
+    # Recharger le PATH pour la session actuelle
+    export PATH="$INSTALL_HOME/.local/bin:$PATH"
+
     # Vérifier l'installation
     if command -v claude &> /dev/null; then
         success "Claude Code installé avec succès"
         claude --version || true
     else
-        warning "Claude Code installé mais non disponible dans PATH"
-        info "Ajoutez cette ligne à votre ~/.bashrc ou ~/.profile :"
-        info "export PATH=\"\$HOME/.local/bin:\$PATH\""
+        warning "Claude Code installé mais nécessite rechargement du shell"
+        info "Exécutez: source ~/.bashrc"
     fi
 }
 
@@ -425,17 +441,23 @@ ${BLUE}Répertoire d'installation:${NC}
 
 ${BLUE}Prochaines étapes:${NC}
 
-  1. Créer un nouveau projet:
-     ${GREEN}./run_agent.sh --new mon_projet${NC}
+  ${YELLOW}⚠️  IMPORTANT: N'utilisez PAS sudo avec run_agent.sh !${NC}
+  ${YELLOW}    Claude Code fonctionne avec votre compte utilisateur.${NC}
 
-  2. Lister les projets:
-     ${GREEN}./run_agent.sh --list${NC}
+  1. Recharger le shell pour activer Claude Code:
+     ${GREEN}source ~/.bashrc${NC}
 
-  3. Vérifier le statut:
+  2. Authentifier Claude Code (OBLIGATOIRE):
+     ${GREEN}claude auth login${NC}
+
+  3. Ajouter une demande de projet prioritaire:
+     ${GREEN}./run_agent.sh --request "Install Docker and Docker Compose"${NC}
+
+  4. Lancer le mode autonome immédiatement:
+     ${GREEN}./run_agent.sh --run-now${NC}
+
+  5. Vérifier le statut:
      ${GREEN}./run_agent.sh --status${NC}
-
-  4. Voir l'aide complète:
-     ${GREEN}./run_agent.sh --help${NC}
 
 ${BLUE}Tâche automatique:${NC}
   ✓ Configurée pour s'exécuter tous les jours à minuit
@@ -447,9 +469,9 @@ ${BLUE}Vérifier la tâche cron:${NC}
 ${BLUE}Documentation:${NC}
   Consultez le fichier README.md pour plus d'informations
 
-${YELLOW}Note importante:${NC}
-  Si vous avez installé Claude Code, redémarrez votre shell ou exécutez:
-  ${GREEN}source ~/.bashrc${NC}
+${RED}⚠️  NE PAS UTILISER SUDO:${NC}
+  ${RED}✗ sudo ./run_agent.sh --run-now${NC}  (FAUX)
+  ${GREEN}✓ ./run_agent.sh --run-now${NC}       (CORRECT)
 
 ${GREEN}Bon développement avec Claude Code ! 🚀${NC}
 EOF
