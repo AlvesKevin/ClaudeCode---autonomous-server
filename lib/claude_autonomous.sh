@@ -517,41 +517,37 @@ daily_autonomous_routine() {
 
     local routine_log="${LOGS_DIR}/autonomous_routine_$(date +%Y%m%d).log"
 
-    # Déclarer les variables AVANT le bloc pour éviter problème de sous-shell
-    local analysis_file=""
+    echo "═══════════════════════════════════════════════════════════" | tee -a "$routine_log"
+    echo "ROUTINE AUTONOME - $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "$routine_log"
+    echo "═══════════════════════════════════════════════════════════" | tee -a "$routine_log"
 
-    {
-        echo "═══════════════════════════════════════════════════════════"
-        echo "ROUTINE AUTONOME - $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "═══════════════════════════════════════════════════════════"
+    # 1. Analyse système (AVANT le bloc de logging)
+    log_info "Étape 1: Analyse du système"
+    local analysis_file=$(analyze_system_with_claude)
 
-        # 1. Analyse système
-        log_info "Étape 1: Analyse du système"
-        analysis_file=$(analyze_system_with_claude)
+    # 2. Planification autonome
+    log_info "Étape 2: Planification des projets du jour"
+    autonomous_project_planning "$analysis_file"
 
-        # 2. Planification autonome
-        log_info "Étape 2: Planification des projets du jour"
-        autonomous_project_planning "$analysis_file"
+    # 3. Travailler sur les projets existants actifs
+    log_info "Étape 3: Travail sur les projets existants"
 
-        # 3. Travailler sur les projets existants actifs
-        log_info "Étape 3: Travail sur les projets existants"
+    local active_projects=$(get_active_projects)
 
-        local active_projects=$(get_active_projects)
+    if [[ -n "$active_projects" && "$active_projects" != "[]" ]]; then
+        echo "$active_projects" | jq -r '.[]' | while read -r project_name; do
+            log_info "Travail autonome sur: $project_name"
+            execute_project_autonomously "$project_name"
+        done
+    else
+        log_info "Aucun projet actif en cours"
+    fi
 
-        if [[ -n "$active_projects" && "$active_projects" != "[]" ]]; then
-            echo "$active_projects" | jq -r '.[]' | while read -r project_name; do
-                log_info "Travail autonome sur: $project_name"
-                execute_project_autonomously "$project_name"
-            done
-        else
-            log_info "Aucun projet actif en cours"
-        fi
+    log_info "Routine quotidienne terminée"
 
-        echo "═══════════════════════════════════════════════════════════"
-        echo "ROUTINE AUTONOME TERMINÉE - $(date '+%Y-%m-%d %H:%M:%S')"
-        echo "═══════════════════════════════════════════════════════════"
-
-    } | tee "$routine_log"
+    echo "═══════════════════════════════════════════════════════════" | tee -a "$routine_log"
+    echo "ROUTINE AUTONOME TERMINÉE - $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "$routine_log"
+    echo "═══════════════════════════════════════════════════════════" | tee -a "$routine_log"
 
     log_success "Routine quotidienne autonome terminée"
     log_info "Log complet: $routine_log"
